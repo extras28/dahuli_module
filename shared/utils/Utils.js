@@ -63,6 +63,25 @@ export function convertJsonToExcel(jsonData, outputFileName) {
   const worksheet = XLSX.utils.json_to_sheet(jsonData, {
     skipHeader: true,
   });
+
+  // Specify the number format code to display up to 4 decimal places without rounding
+  const numberFormatCode = "0.####";
+
+  // Loop through all cells in the worksheet and set the number format code
+  for (const cellAddress in worksheet) {
+    if (cellAddress[0] === "!") continue; // Skip sheet-level properties
+
+    const cell = worksheet[cellAddress];
+    if (
+      cell &&
+      typeof cell === "object" &&
+      typeof cell.v === "number" &&
+      cell.v % 1 !== 0
+    ) {
+      cell.z = numberFormatCode; // Set the number format code for the cell (if it has decimal places)
+    }
+  }
+
   // Set column widths and center-align headers
   const colWidths = {};
   const headerRange = XLSX.utils.decode_range(worksheet["!ref"]);

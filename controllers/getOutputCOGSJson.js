@@ -209,11 +209,6 @@ export default function getOutputCOGSJson(olJSON, cogsJSON, plJSON, scJSON) {
       { t: "n", v: 0, f: "" }
     );
 
-    // console.log({
-    //   sku: item["Sku"],
-    //   customizePackageCost: customizePackageCost,
-    // });
-
     // cột phí vận chuyển nội địa
     const domesticScObj = item?.productList[0]?.domesticShipType2;
     const domesticShippingCost = {
