@@ -1,14 +1,21 @@
 import XLSX from "xlsx";
 import getOutputCOGSJson from "./controllers/getOutputCOGSJson.js";
-import { convertJsonToExcel } from "./shared/utils/Utils.js";
+import {
+  convertJsonToExcel,
+  formatShippingCostJsonObject,
+} from "./shared/utils/Utils.js";
 import fs from "fs";
 
 const olFile = "./assets/xlsx/Order List - Auto Goods.xlsx";
 const plFile = "./assets/xlsx/Product List.xlsx";
 const scFile = "./assets/xlsx/Order List - Shipping Cost.xlsx";
 const tsvPath = "./assets/xlsx/FBA176X1FK4S.tsv";
+const scFile1 =
+  "./assets/xlsx/Shipping cost S256 S257 (JiuFang) - 07.06 (USD).xlsx";
 
 const orderFiles = [olFile];
+
+let shipmentIds = [];
 
 /**
  * parse tsv file to json
@@ -22,6 +29,8 @@ function tsvToJson(inputFilePath) {
   // Split the TSV data into rows and columns
   const rows = tsvData.split("\n").map((row) => row.split("\t"));
   const shipmentId = rows[0][1];
+
+  shipmentIds = shipmentIds.concat(shipmentId);
 
   const cogsJson = [];
 
@@ -79,7 +88,7 @@ function sheetToJson(path, order = null) {
  */
 const olJSON = orderFiles.flatMap((item, index) => sheetToJson(item, index));
 const cogsJSON = tsvToJson(tsvPath);
-const scJSON = sheetToJson(scFile, 0);
+const scJSON = sheetToJson(scFile1, 0);
 const plJSON = sheetToJson(plFile);
 
 // get the final cogs json object

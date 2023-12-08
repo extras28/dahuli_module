@@ -19,6 +19,14 @@ export default function getOutputCOGSJson(olJSON, cogsJSON, plJSON, scJSON) {
   const pl = plJSON.map((item) => formatProductListJsonObject(item));
   const sc = formatShippingCostJsonObject(scJSON);
 
+  const shipmentId = cogsJSON[0]["Shipment ID"];
+
+  const domesticShipmentById = sc.find(
+    (item, index) =>
+      item["Shipping Cost Type"] === "Domestic Shipping Cost" &&
+      item.shipmentId == "FBA176X1FK4S"
+  );
+
   /**
    * Tính tỷ giá, phí vận chuyển tử holder đến kho và từ kho ra cảng cho từng sản phẩm
    */
@@ -33,18 +41,22 @@ export default function getOutputCOGSJson(olJSON, cogsJSON, plJSON, scJSON) {
         o["fileOrder"] === item["fileOrder"]
     );
 
-    const domesticShipType2 = !!domesticShipInsideOrder
-      ? {
-          "Shipping Cost Type": "Domestic Shipping Cost",
-          "Total CNY": domesticShipInsideOrder["Total CNY"],
-          "Total USD": domesticShipInsideOrder["Total USD"],
-          "Shipping Exchange Rate": +Number(
+    const domesticShipType2 = {
+      "Shipping Cost Type": "Domestic Shipping Cost",
+      "Total CNY": !!domesticShipInsideOrder
+        ? domesticShipInsideOrder["Total CNY"]
+        : 0,
+      "Total USD": !!domesticShipInsideOrder
+        ? domesticShipInsideOrder["Total USD"]
+        : 0,
+      "Shipping Exchange Rate": !!domesticShipInsideOrder
+        ? +Number(
             domesticShipInsideOrder["Total CNY"] /
               domesticShipInsideOrder["Total USD"]
-          ).toFixed(4),
-          fileOrder: domesticShipInsideOrder["fileOrder"],
-        }
-      : sc.find((s) => s["Shipping Cost Type"] === "Domestic Shipping Cost");
+          ).toFixed(4)
+        : 0,
+      fileOrder: domesticShipInsideOrder["fileOrder"],
+    };
 
     return {
       ...item,
@@ -214,17 +226,37 @@ export default function getOutputCOGSJson(olJSON, cogsJSON, plJSON, scJSON) {
     const domesticShippingCost = {
       t: "n",
       v: +Number(
-        domesticScObj["Total CNY"] /
-          domesticScObj["Shipping Exchange Rate"] /
+        (domesticScObj["Total CNY"] / domesticScObj["Shipping Exchange Rate"] +
+          domesticShipmentById["Total USD"]) /
           totalUnit
       ).toFixed(4),
-      f: `${domesticScObj["Total CNY"]}/${domesticScObj["Shipping Exchange Rate"]}/${totalUnit}`,
+      f: `(${domesticScObj["Total CNY"]}/${domesticScObj["Shipping Exchange Rate"]}+${domesticShipmentById["Total USD"]})/${totalUnit}`,
     };
 
+    // cột phí vận chuyển quốc tế
     const internationalScObj = sc.find(
-      (s) => s["Shipping Cost Type"] === "Internation Shipping Cost"
+      (s) =>
+        s["Shipping Cost Type"] === "Internation Shipping Cost" &&
+        s.shipmentId === shipmentId
+    );
+    const internationShippingCost = {
+      t: "n",
+      v: internationalScObj["Total USD"] / totalUnit,
+      f: `${internationalScObj["Total USD"]}/${totalUnit}`,
+    };
+
+    // cột payment cost
+    const paymentCostInSc = sc.find(
+      (item) => item["Shipping Cost Type"] === "Payment cost"
     );
 
+    const paymentCost = {
+      t: "n",
+      v: paymentCostInSc["Total USD"] / totalUnit,
+      f: `${paymentCostInSc["Total USD"]}/${totalUnit}`,
+    };
+
+    //  cột cogs
     const cogsField = {
       t: "n",
       v: +Number(
@@ -232,11 +264,7 @@ export default function getOutputCOGSJson(olJSON, cogsJSON, plJSON, scJSON) {
           Number(customizePackageCost.v) +
           Number(packingAndLabelingCost.v) +
           Number(domesticShippingCost.v) +
-          Number(
-            internationalScObj["Total CNY"] /
-              internationalScObj["Shipping Exchange Rate"] /
-              totalUnit
-          )
+          Number(internationShippingCost.v)
       ).toFixed(4),
       f: `SUM(D${index + 2}:I${index + 2})`,
     };
@@ -256,16 +284,8 @@ export default function getOutputCOGSJson(olJSON, cogsJSON, plJSON, scJSON) {
           }
         : { t: "n", v: "", f: "" },
       ["Domestic Shipping Cost"]: domesticShippingCost,
-      ["International Shipping Cost"]: {
-        t: "n",
-        v: +Number(
-          internationalScObj["Total CNY"] /
-            internationalScObj["Shipping Exchange Rate"] /
-            totalUnit
-        ).toFixed(4),
-        f: "",
-      },
-      ["Payment Cost"]: { t: "n", v: "", f: "" },
+      ["International Shipping Cost"]: internationShippingCost,
+      ["Payment Cost"]: paymentCost,
       ["COGS"]: cogsField,
 
       ["Total Units In A Shipment"]: {
@@ -306,5 +326,36 @@ export default function getOutputCOGSJson(olJSON, cogsJSON, plJSON, scJSON) {
     return Object.values(item);
   });
 
-  return [headers].concat(output);
+  const checkPaymentCostCell = outputCogs.reduce(
+    (accumulator, item, index) => {
+      return {
+        t: "n",
+        v: accumulator.v + item["Payment Cost"].v * item.PPU.v,
+        f:
+          accumulator.f +
+          (index === 0 ? "SUM(" : "+") +
+          `I${index + 2}*C${index + 2}` +
+          (index === outputCogs.length - 1 ? ")" : ""),
+      };
+    },
+    { t: "n", v: 0, f: "" }
+  );
+
+  const checkRow = [
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    checkPaymentCostCell,
+    { v: "" },
+    { v: "" },
+    { v: "" },
+    { v: "" },
+  ];
+
+  return [headers].concat(output, [[], checkRow]);
 }

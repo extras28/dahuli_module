@@ -41,13 +41,29 @@ export function formatProductListJsonObject(inputObj) {
  */
 export function formatShippingCostJsonObject(obj) {
   return obj?.map((item) => {
+    const shipmentId = item["Product Name"]?.split('"')[1] ?? null;
+    let shipmentType = "";
+
+    if (item["Product Name"]?.includes("Internation")) {
+      shipmentType = "Internation Shipping Cost";
+    } else {
+      shipmentType = "Domestic Shipping Cost";
+    }
+
+    if (!shipmentId) {
+      shipmentType = item["Product Name"] ?? item["Shipping Cost Type"];
+    }
+
     return {
-      "Shipping Cost Type": item["Shipping Cost Type"],
-      "Total CNY": item["Total CNY"],
-      "Total USD": item["Total USD"],
-      "Shipping Exchange Rate": +Number(
-        item["Total CNY"] / item["Total USD"]
-      ).toFixed(4),
+      "Shipping Cost Type": shipmentType,
+      shipmentId: shipmentId,
+      "Total CNY": item["Total CNY"] ?? 1,
+      "Total USD": item["Total USD"] ?? 1,
+      "Shipping Exchange Rate": !isNaN(
+        Number(item["Total CNY"] / item["Total USD"])
+      )
+        ? +Number(item["Total CNY"] / item["Total USD"]).toFixed(4)
+        : 1,
       fileOrder: item["fileOrder"],
     };
   });
@@ -63,6 +79,17 @@ export function convertJsonToExcel(jsonData, outputFileName) {
   const worksheet = XLSX.utils.json_to_sheet(jsonData, {
     skipHeader: true,
   });
+
+  const headerStyle = {
+    bold: true,
+    alignment: { horizontal: "center" },
+    fill: {
+      fgColor: { rgb: "#92d050" }, // Màu #92d050
+    },
+  };
+
+  // Loop through cells in the header row and apply the format
+  const headerRange = XLSX.utils.decode_range(worksheet["!ref"]);
 
   // Specify the number format code to display up to 4 decimal places without rounding
   const numberFormatCode = "0.####";
@@ -84,16 +111,13 @@ export function convertJsonToExcel(jsonData, outputFileName) {
 
   // Set column widths and center-align headers
   const colWidths = {};
-  const headerRange = XLSX.utils.decode_range(worksheet["!ref"]);
+  // const headerRange = XLSX.utils.decode_range(worksheet["!ref"]);
   for (let C = headerRange.s.c; C <= headerRange.e.c; ++C) {
     const headerCell = XLSX.utils.encode_cell({ r: headerRange.s.r, c: C });
     const headerText = worksheet[headerCell].v;
     const len = String(headerText).length;
     colWidths[C] = Math.max(len, 10); // Set minimum width to 10
-    worksheet[headerCell].s = {
-      bold: true,
-      alignment: { horizontal: "center" },
-    };
+    worksheet[headerCell].s = headerStyle;
   }
 
   // Adjust column widths to fit content
